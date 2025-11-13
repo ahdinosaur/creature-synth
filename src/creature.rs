@@ -1,6 +1,5 @@
 use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
-use std::time::Duration;
 
 use crate::limb::Limb;
 use crate::oscillator::Oscillator;
@@ -12,9 +11,6 @@ const SEG_LENGTH: f32 = 30.0;
 const SEG_THICKNESS: f32 = 10.0;
 
 const BODY_RADIUS: f32 = 35.0;
-
-const WAVE_FREQUENCY_HZ: f32 = 0.4;
-const BASE_AMPLITUDE_RAD: f32 = 0.2;
 
 #[derive(Component)]
 #[require(Transform, Visibility, Oscillator, Children)]
@@ -32,15 +28,12 @@ pub fn spawn_creature(
     let body_mat = materials.add(Color::srgb(0.3, 0.05, 0.4));
 
     // Single oscillator on the creature that outputs one angle for all joints.
-    let omega = std::f32::consts::TAU * WAVE_FREQUENCY_HZ;
     let root = commands
         .spawn((
             Creature,
-            Oscillator {
-                function: Box::new(move |elapsed: Duration| {
-                    let t = elapsed.as_secs_f32();
-                    BASE_AMPLITUDE_RAD * (omega * t).sin()
-                }),
+            Oscillator::Square {
+                frequency: 0.4,
+                amplitude: 0.2,
             },
             Name::new("Creature"),
         ))

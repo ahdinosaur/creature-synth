@@ -15,7 +15,7 @@ pub fn animate_limbs_from_creature(
     let Ok(osc) = creature_q.single() else {
         return;
     };
-    let angle = (osc.function)(time.elapsed());
+    let angle = osc.sample(time.elapsed());
 
     for mut transform in &mut limbs_q {
         transform.rotation = Quat::from_rotation_z(angle);
