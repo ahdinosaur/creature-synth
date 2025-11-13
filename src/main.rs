@@ -4,13 +4,13 @@ mod oscillator;
 
 use bevy::prelude::*;
 
-use crate::{creature::spawn_creature, limb::animate_limbs_from_creature};
+use crate::{creature::spawn_creature, limb::animate_limb_segments};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, (setup_camera, spawn_creature))
-        .add_systems(Update, animate_limbs_from_creature)
+        .add_systems(Update, animate_limb_segments)
         .run();
 }
 

@@ -1,11 +1,13 @@
+use std::f32::consts::TAU;
+
 use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
-use crate::limb::Limb;
+use crate::limb::{Limb, LimbSegment, LimbSegmentBody, LimbSegmentJoint};
 use crate::oscillator::Oscillator;
 
-const NUM_ARMS: usize = 16;
-const SEGMENTS_PER_ARM: usize = 16;
+const NUM_LIMBS: usize = 16;
+const SEGMENTS_PER_LIMB: usize = 16;
 
 const SEG_LENGTH: f32 = 30.0;
 const SEG_THICKNESS: f32 = 10.0;
@@ -13,8 +15,12 @@ const SEG_THICKNESS: f32 = 10.0;
 const BODY_RADIUS: f32 = 35.0;
 
 #[derive(Component)]
-#[require(Transform, Visibility, Oscillator, Children)]
+#[require(Transform, Visibility, Children)]
 pub struct Creature;
+
+#[derive(Component)]
+#[require(Transform, Visibility)]
+pub struct CreatureBody;
 
 pub fn spawn_creature(
     mut commands: Commands,
@@ -27,76 +33,86 @@ pub fn spawn_creature(
     let body_mesh = meshes.add(Circle::new(BODY_RADIUS));
     let body_mat = materials.add(Color::srgb(0.3, 0.05, 0.4));
 
-    // Single oscillator on the creature that outputs one angle for all joints.
-    let root = commands
-        .spawn((
-            Creature,
-            Oscillator::Square {
-                frequency: 0.4,
-                amplitude: 0.2,
-            },
-            Name::new("Creature"),
-        ))
-        .id();
+    let creature = commands.spawn((Creature, Name::new("Creature"))).id();
 
     // Visual body
-    commands.entity(root).with_children(|p| {
+    commands.entity(creature).with_children(|p| {
         p.spawn((
+            CreatureBody,
+            Name::new("Body"),
             Mesh2d(body_mesh.clone()),
             MeshMaterial2d(body_mat.clone()),
             Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
-            Name::new("Body"),
         ));
     });
 
     // Arms
-    for arm in 0..NUM_ARMS {
-        let base_angle = (arm as f32 / NUM_ARMS as f32) * std::f32::consts::TAU;
+    for limb_index in 0..NUM_LIMBS {
+        let limb_angle = (limb_index as f32 / NUM_LIMBS as f32) * TAU;
+        let limb_osc = if limb_index % 2 == 0 {
+            Oscillator::Sin {
+                frequency: 0.4,
+                amplitude: 0.2,
+            }
+        } else {
+            Oscillator::Square {
+                frequency: 0.4,
+                amplitude: 0.2,
+            }
+        };
 
-        // Base joint, oriented outward (static)
-        let base_joint = commands
+        let limb = commands
             .spawn((
-                Transform::from_rotation(Quat::from_rotation_z(base_angle)),
-                Name::new(format!("Arm {arm} BaseJoint")),
+                Limb,
+                limb_osc,
+                Name::new(format!("Limb {limb_index}")),
+                Transform::from_rotation(Quat::from_rotation_z(limb_angle)),
             ))
             .id();
 
-        commands.entity(root).add_children(&[base_joint]);
+        commands.entity(creature).add_children(&[limb]);
 
-        let mut current_joint = base_joint;
+        let mut current_limb_parent = limb;
 
-        for seg in 0..SEGMENTS_PER_ARM {
-            // Each limb joint gets the same local rotation from the creature.
-            let seg_joint = commands
+        for segment_index in 0..SEGMENTS_PER_LIMB {
+            // Each limb segment gets the same local rotation from the creature.
+            let limb_segment = commands
                 .spawn((
-                    Limb,
+                    LimbSegment,
+                    Name::new(format!("Limb {limb_index} Segment {segment_index}")),
                     Transform::default(),
-                    Name::new(format!("Arm {arm} Joint {seg}")),
                 ))
                 .id();
 
-            commands.entity(current_joint).add_children(&[seg_joint]);
+            commands
+                .entity(current_limb_parent)
+                .add_children(&[limb_segment]);
 
             // Visual rectangle, positioned so its left end is at the joint
-            commands.entity(seg_joint).with_children(|p| {
+            commands.entity(limb_segment).with_children(|p| {
                 p.spawn((
+                    LimbSegmentBody,
+                    Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
                     Mesh2d(limb_mesh.clone()),
                     MeshMaterial2d(limb_mat.clone()),
                     Transform::from_translation(Vec3::new(SEG_LENGTH / 2.0, 0.0, 0.0)),
-                    Name::new(format!("Arm {arm} Segment {seg}")),
                 ));
             });
 
             // Next joint at the tip of this segment
-            let next_joint = commands
+            let next_limb_joint = commands
                 .spawn((
+                    LimbSegmentJoint,
+                    Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
                     Transform::from_translation(Vec3::new(SEG_LENGTH, 0.0, 0.0)),
-                    Name::new(format!("Arm {arm} AfterJoint {seg}")),
                 ))
                 .id();
 
-            commands.entity(seg_joint).add_children(&[next_joint]);
-            current_joint = next_joint;
+            commands
+                .entity(limb_segment)
+                .add_children(&[next_limb_joint]);
+
+            current_limb_parent = next_limb_joint;
         }
     }
 }
