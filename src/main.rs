@@ -16,7 +16,6 @@ const BASE_AMPLITUDE_RAD: f32 = 0.2;
 
 #[derive(Component)]
 struct Oscillator {
-    // Returns the angle to apply to every limb joint at time t.
     function: Box<dyn Fn(Duration) -> f32 + Send + Sync + 'static>,
 }
 
