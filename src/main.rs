@@ -3,22 +3,20 @@ use std::time::Duration;
 use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
-const NUM_ARMS: usize = 8;
-const SEGMENTS_PER_ARM: usize = 32;
+const NUM_ARMS: usize = 16;
+const SEGMENTS_PER_ARM: usize = 16;
 
-const SEG_LENGTH: f32 = 10.0;
+const SEG_LENGTH: f32 = 30.0;
 const SEG_THICKNESS: f32 = 10.0;
 
 const BODY_RADIUS: f32 = 35.0;
 
-// Oscillation params
-const WAVE_FREQUENCY_HZ: f32 = 0.5;
-const BASE_AMPLITUDE_RAD: f32 = 0.5; // ~28.6 degrees
-const AMPLITUDE_DECAY: f32 = 1.;
-const PHASE_PER_SEGMENT: f32 = 0.45; // radians
+const WAVE_FREQUENCY_HZ: f32 = 0.4;
+const BASE_AMPLITUDE_RAD: f32 = 0.2;
 
 #[derive(Component)]
 struct Oscillator {
+    // Returns the angle to apply to every limb joint at time t.
     function: Box<dyn Fn(Duration) -> f32 + Send + Sync + 'static>,
 }
 
@@ -34,14 +32,14 @@ impl Default for Oscillator {
 struct Creature;
 
 #[derive(Component)]
-#[require(Transform, Visibility, Oscillator, Children)]
+#[require(Transform, Visibility, Children)]
 struct Limb;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, (setup_camera, spawn_creature))
-        .add_systems(Update, animate_oscillators)
+        .add_systems(Update, animate_limbs_from_creature)
         .run();
 }
 
@@ -49,10 +47,17 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-fn animate_oscillators(time: Res<Time>, mut q: Query<(&Oscillator, &mut Transform)>) {
-    let t = time.elapsed();
-    for (osc, mut transform) in &mut q {
-        let angle = (osc.function)(t);
+fn animate_limbs_from_creature(
+    time: Res<Time>,
+    creature_q: Query<&Oscillator, With<Creature>>,
+    mut limbs_q: Query<&mut Transform, With<Limb>>,
+) {
+    let Ok(osc) = creature_q.single() else {
+        return;
+    };
+    let angle = (osc.function)(time.elapsed());
+
+    for mut transform in &mut limbs_q {
         transform.rotation = Quat::from_rotation_z(angle);
     }
 }
@@ -68,7 +73,20 @@ fn spawn_creature(
     let body_mesh = meshes.add(Circle::new(BODY_RADIUS));
     let body_mat = materials.add(Color::srgb(0.3, 0.05, 0.4));
 
-    let root = commands.spawn((Creature, Name::new("Creature"))).id();
+    // Single oscillator on the creature that outputs one angle for all joints.
+    let omega = std::f32::consts::TAU * WAVE_FREQUENCY_HZ;
+    let root = commands
+        .spawn((
+            Creature,
+            Oscillator {
+                function: Box::new(move |elapsed: Duration| {
+                    let t = elapsed.as_secs_f32();
+                    BASE_AMPLITUDE_RAD * (omega * t).sin()
+                }),
+            },
+            Name::new("Creature"),
+        ))
+        .id();
 
     // Visual body
     commands.entity(root).with_children(|p| {
@@ -80,12 +98,11 @@ fn spawn_creature(
         ));
     });
 
-    let omega = std::f32::consts::TAU * WAVE_FREQUENCY_HZ;
-
+    // Arms
     for arm in 0..NUM_ARMS {
         let base_angle = (arm as f32 / NUM_ARMS as f32) * std::f32::consts::TAU;
 
-        // Base joint, oriented outward (no Limb here; the chain below has 8 Limbs)
+        // Base joint, oriented outward (static)
         let base_joint = commands
             .spawn((
                 Transform::from_rotation(Quat::from_rotation_z(base_angle)),
@@ -93,30 +110,20 @@ fn spawn_creature(
             ))
             .id();
 
-        // Parent it to the creature
         commands.entity(root).add_children(&[base_joint]);
 
-        // Build the chain: Joint_i (Limb+Osc) -> [mesh] -> NextJoint ...
         let mut current_joint = base_joint;
 
         for seg in 0..SEGMENTS_PER_ARM {
-            // Oscillator for this segment (traveling wave + decay)
-            let phase = base_angle + (seg as f32) * PHASE_PER_SEGMENT;
-            let amplitude = BASE_AMPLITUDE_RAD * AMPLITUDE_DECAY.powi(seg as i32);
-
-            let osc = Oscillator {
-                function: Box::new(move |elapsed: Duration| {
-                    let t = elapsed.as_secs_f32();
-                    amplitude * (omega * t + phase)
-                }),
-            };
-
-            // Segment pivot joint (this is "the limb" segment)
+            // Each limb joint gets the same local rotation from the creature.
             let seg_joint = commands
-                .spawn((Limb, osc, Name::new(format!("Arm {arm} Joint {seg}"))))
+                .spawn((
+                    Limb,
+                    Transform::default(),
+                    Name::new(format!("Arm {arm} Joint {seg}")),
+                ))
                 .id();
 
-            // Attach joint under current_joint
             commands.entity(current_joint).add_children(&[seg_joint]);
 
             // Visual rectangle, positioned so its left end is at the joint
@@ -129,7 +136,7 @@ fn spawn_creature(
                 ));
             });
 
-            // Next joint at the tip of this segment (no Limb here)
+            // Next joint at the tip of this segment
             let next_joint = commands
                 .spawn((
                     Transform::from_translation(Vec3::new(SEG_LENGTH, 0.0, 0.0)),
