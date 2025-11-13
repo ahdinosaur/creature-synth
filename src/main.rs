@@ -4,17 +4,17 @@ use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
 const NUM_ARMS: usize = 8;
-const SEGMENTS_PER_ARM: usize = 8;
+const SEGMENTS_PER_ARM: usize = 32;
 
-const SEG_LENGTH: f32 = 40.0;
+const SEG_LENGTH: f32 = 10.0;
 const SEG_THICKNESS: f32 = 10.0;
 
 const BODY_RADIUS: f32 = 35.0;
 
 // Oscillation params
-const WAVE_FREQUENCY_HZ: f32 = 0.8;
+const WAVE_FREQUENCY_HZ: f32 = 0.5;
 const BASE_AMPLITUDE_RAD: f32 = 0.5; // ~28.6 degrees
-const AMPLITUDE_DECAY: f32 = 0.85;
+const AMPLITUDE_DECAY: f32 = 1.;
 const PHASE_PER_SEGMENT: f32 = 0.45; // radians
 
 #[derive(Component)]
@@ -22,12 +22,19 @@ struct Oscillator {
     function: Box<dyn Fn(Duration) -> f32 + Send + Sync + 'static>,
 }
 
+impl Default for Oscillator {
+    fn default() -> Self {
+        let function = Box::new(|_time| 0_f32);
+        Self { function }
+    }
+}
+
 #[derive(Component)]
-#[require(Transform, Children)]
+#[require(Transform, Visibility, Oscillator, Children)]
 struct Creature;
 
 #[derive(Component)]
-#[require(Transform, Children)]
+#[require(Transform, Visibility, Oscillator, Children)]
 struct Limb;
 
 fn main() {
@@ -100,7 +107,7 @@ fn spawn_creature(
             let osc = Oscillator {
                 function: Box::new(move |elapsed: Duration| {
                     let t = elapsed.as_secs_f32();
-                    amplitude * (omega * t + phase).sin()
+                    amplitude * (omega * t + phase)
                 }),
             };
 
