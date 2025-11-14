@@ -50,11 +50,7 @@ pub fn spawn_creature(
     // Arms
     for limb_index in 0..NUM_LIMBS {
         let limb_angle = (limb_index as f32 / NUM_LIMBS as f32) * TAU;
-        let limb_osc = Oscillator {
-            wave: Wave::Sine,
-            frequency: 0.4,
-            amplitude: 0.2,
-        };
+        let limb_osc = Oscillator::new(Wave::Sine, 0.2, 0.4);
 
         let limb = commands
             .spawn((
