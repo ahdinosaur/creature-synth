@@ -78,7 +78,7 @@ pub fn spawn_creature(
             // Each limb segment gets the same local rotation from the creature.
             let limb_segment = commands
                 .spawn((
-                    LimbSegment,
+                    LimbSegment { segment_index },
                     Name::new(format!("Limb {limb_index} Segment {segment_index}")),
                     Transform::default(),
                 ))
