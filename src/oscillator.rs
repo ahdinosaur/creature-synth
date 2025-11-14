@@ -14,6 +14,10 @@ pub enum Oscillator {
         frequency: f32,
         amplitude: f32,
     },
+    Triangle {
+        frequency: f32,
+        amplitude: f32,
+    },
 }
 
 impl Oscillator {
@@ -39,6 +43,14 @@ impl Oscillator {
                 } else {
                     amplitude.neg()
                 }
+            }
+            Oscillator::Triangle {
+                frequency,
+                amplitude,
+            } => {
+                let phase = (t * frequency + 0.25_f32) % 1_f32;
+                let tri = 1_f32 - 4_f32 * (phase - 0.5_f32).abs();
+                amplitude * tri
             }
         }
     }

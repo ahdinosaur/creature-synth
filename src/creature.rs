@@ -56,7 +56,7 @@ pub fn spawn_creature(
                 amplitude: 0.2,
             }
         } else {
-            Oscillator::Square {
+            Oscillator::Triangle {
                 frequency: 0.4,
                 amplitude: 0.2,
             }
