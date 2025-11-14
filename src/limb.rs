@@ -12,7 +12,7 @@ pub struct LimbSegment {
     pub segment_index: usize,
 }
 
-const SEGMENT_INDEX_FLEX_MULTIPLIER: f32 = 1.05;
+const SEGMENT_INDEX_FLEX_MULTIPLIER: f32 = 1.1;
 
 #[derive(Component)]
 #[require(Transform, Visibility)]
