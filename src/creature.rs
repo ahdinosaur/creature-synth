@@ -4,7 +4,7 @@ use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
 use crate::limb::{Limb, LimbSegment, LimbSegmentBody, LimbSegmentJoint};
-use crate::oscillator::Oscillator;
+use crate::oscillator::{Oscillator, Wave};
 
 const NUM_LIMBS: usize = 16;
 const SEGMENTS_PER_LIMB: usize = 16;
@@ -50,7 +50,8 @@ pub fn spawn_creature(
     // Arms
     for limb_index in 0..NUM_LIMBS {
         let limb_angle = (limb_index as f32 / NUM_LIMBS as f32) * TAU;
-        let limb_osc = Oscillator::Sin {
+        let limb_osc = Oscillator {
+            wave: Wave::Sine,
             frequency: 0.4,
             amplitude: 0.2,
         };
