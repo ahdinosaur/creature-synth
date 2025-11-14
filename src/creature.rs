@@ -9,7 +9,8 @@ use crate::oscillator::Oscillator;
 const NUM_LIMBS: usize = 16;
 const SEGMENTS_PER_LIMB: usize = 16;
 
-const SEG_LENGTH: f32 = 30.0;
+const SEG_LENGTH: f32 = 20.0;
+const SEG_MARGIN: f32 = 5.0;
 const SEG_THICKNESS: f32 = 10.0;
 
 const BODY_RADIUS: f32 = 35.0;
@@ -95,7 +96,7 @@ pub fn spawn_creature(
                     Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
                     Mesh2d(limb_mesh.clone()),
                     MeshMaterial2d(limb_mat.clone()),
-                    Transform::from_translation(Vec3::new(SEG_LENGTH / 2.0, 0.0, 0.0)),
+                    Transform::from_translation(Vec3::new(SEG_LENGTH / 2.0 + SEG_MARGIN, 0.0, 0.0)),
                 ));
             });
 
@@ -104,7 +105,11 @@ pub fn spawn_creature(
                 .spawn((
                     LimbSegmentJoint,
                     Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
-                    Transform::from_translation(Vec3::new(SEG_LENGTH, 0.0, 0.0)),
+                    Transform::from_translation(Vec3::new(
+                        SEG_LENGTH + 2_f32 * SEG_MARGIN,
+                        0.0,
+                        0.0,
+                    )),
                 ))
                 .id();
 
