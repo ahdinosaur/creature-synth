@@ -76,8 +76,7 @@ pub trait LimbSegmentType {
     ) -> EntityCommands<'a>;
 
     fn spawn_segment(
-        commands: &mut Commands,
-        parent: Entity,
+        parent: EntityCommands<'_>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
@@ -148,8 +147,7 @@ impl LimbSegmentType for RectType {
     }
 
     fn spawn_segment(
-        commands: &mut Commands,
-        parent: Entity,
+        mut parent: EntityCommands<'_>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
@@ -158,7 +156,7 @@ impl LimbSegmentType for RectType {
 
         let mut joint_out: Option<Entity> = None;
 
-        commands.entity(parent).with_children(|parent| {
+        parent.with_children(|parent| {
             let mut segment = parent.spawn((
                 LimbSegment {
                     segment_index,
@@ -267,8 +265,7 @@ impl LimbSegmentType for DiskType {
     }
 
     fn spawn_segment(
-        commands: &mut Commands,
-        parent: Entity,
+        mut parent: EntityCommands<'_>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
@@ -281,7 +278,7 @@ impl LimbSegmentType for DiskType {
 
         let mut joint_out: Option<Entity> = None;
 
-        commands.entity(parent).with_children(|parent| {
+        parent.with_children(|parent| {
             let mut segment = parent.spawn((
                 LimbSegment {
                     segment_index,
@@ -348,18 +345,17 @@ impl LimbSegmentTypeId {
 
     pub fn spawn_segment(
         &self,
-        commands: &mut Commands,
-        parent: Entity,
+        parent: EntityCommands<'_>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
     ) -> Entity {
         match self {
             LimbSegmentTypeId::Rectangle => {
-                RectType::spawn_segment(commands, parent, limb_index, segment_index, store)
+                RectType::spawn_segment(parent, limb_index, segment_index, store)
             }
             LimbSegmentTypeId::Disk => {
-                DiskType::spawn_segment(commands, parent, limb_index, segment_index, store)
+                DiskType::spawn_segment(parent, limb_index, segment_index, store)
             }
         }
     }
