@@ -3,7 +3,7 @@ use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::oscillator::{Oscillator, Wave};
+use crate::oscillator::Oscillator;
 
 #[derive(Component)]
 #[require(Oscillator, Transform, Visibility, Children)]
@@ -70,10 +70,10 @@ pub trait LimbSegmentType {
         materials: &mut Assets<ColorMaterial>,
     );
 
-    fn spawn_body(
-        parent: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    fn spawn_body<'a>(
+        parent: &'a mut RelatedSpawnerCommands<'_, ChildOf>,
         store: &LimbAssetStore,
-    ) -> Entity;
+    ) -> EntityCommands<'a>;
 
     fn spawn_segment(
         commands: &mut Commands,
@@ -134,19 +134,17 @@ impl LimbSegmentType for RectType {
         );
     }
 
-    fn spawn_body(
-        parent: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    fn spawn_body<'a>(
+        parent: &'a mut RelatedSpawnerCommands<'_, ChildOf>,
         store: &LimbAssetStore,
-    ) -> Entity {
+    ) -> EntityCommands<'a> {
         let h = store.get(LimbSegmentTypeId::Rectangle);
-        parent
-            .spawn((
-                Name::new("Body"),
-                Mesh2d(h.body_mesh.clone()),
-                MeshMaterial2d(h.body_material.clone()),
-                Transform::from_translation(Vec3::new(0.0, 0.0, Self::BODY_Z)),
-            ))
-            .id()
+        parent.spawn((
+            Name::new("Body"),
+            Mesh2d(h.body_mesh.clone()),
+            MeshMaterial2d(h.body_material.clone()),
+            Transform::from_translation(Vec3::new(0.0, 0.0, Self::BODY_Z)),
+        ))
     }
 
     fn spawn_segment(
@@ -159,21 +157,20 @@ impl LimbSegmentType for RectType {
         let h = store.get(LimbSegmentTypeId::Rectangle);
 
         let mut joint_out: Option<Entity> = None;
+
         commands.entity(parent).with_children(|parent| {
-            let segment = parent
-                .spawn((
-                    LimbSegment {
-                        segment_index,
-                        type_id: LimbSegmentTypeId::Rectangle,
-                    },
-                    Name::new(format!("Limb {limb_index} Segment {segment_index}")),
-                    Transform::default(),
-                ))
-                .id();
+            let mut segment = parent.spawn((
+                LimbSegment {
+                    segment_index,
+                    type_id: LimbSegmentTypeId::Rectangle,
+                },
+                Name::new(format!("Limb {limb_index} Segment {segment_index}")),
+                Transform::default(),
+            ));
 
             segment.with_children(|parent| {
                 // The rectangle "bone".
-                let body = parent.spawn((
+                parent.spawn((
                     LimbSegmentBody,
                     Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
                     Mesh2d(h.segment_mesh.clone()),
@@ -186,18 +183,17 @@ impl LimbSegmentType for RectType {
                 ));
 
                 // Outgoing joint for the next segment.
-                let joint = parent
-                    .spawn((
-                        LimbSegmentJoint,
-                        Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
-                        Transform::from_translation(Vec3::new(
-                            Self::SEGMENT_LENGTH + 2.0 * Self::SEGMENT_MARGIN,
-                            0.0,
-                            0.0,
-                        )),
-                    ))
-                    .id();
-                joint_out = Some(joint);
+                let joint = parent.spawn((
+                    LimbSegmentJoint,
+                    Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
+                    Transform::from_translation(Vec3::new(
+                        Self::SEGMENT_LENGTH + 2.0 * Self::SEGMENT_MARGIN,
+                        0.0,
+                        0.0,
+                    )),
+                ));
+
+                joint_out = Some(joint.id());
             });
         });
 
@@ -257,19 +253,17 @@ impl LimbSegmentType for DiskType {
         );
     }
 
-    fn spawn_body(
-        parent: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    fn spawn_body<'a>(
+        parent: &'a mut RelatedSpawnerCommands<'_, ChildOf>,
         store: &LimbAssetStore,
-    ) -> Entity {
+    ) -> EntityCommands<'a> {
         let h = store.get(LimbSegmentTypeId::Disk);
-        parent
-            .spawn((
-                Name::new("Body"),
-                Mesh2d(h.body_mesh.clone()),
-                MeshMaterial2d(h.body_material.clone()),
-                Transform::from_translation(Vec3::new(0.0, 0.0, Self::BODY_Z)),
-            ))
-            .id()
+        parent.spawn((
+            Name::new("Body"),
+            Mesh2d(h.body_mesh.clone()),
+            MeshMaterial2d(h.body_material.clone()),
+            Transform::from_translation(Vec3::new(0.0, 0.0, Self::BODY_Z)),
+        ))
     }
 
     fn spawn_segment(
@@ -286,20 +280,19 @@ impl LimbSegmentType for DiskType {
         let step = 2.0 * (r + Self::MARGIN);
 
         let mut joint_out: Option<Entity> = None;
-        commands.entity(parent).with_children(|parent| {
-            let segment = parent
-                .spawn((
-                    LimbSegment {
-                        segment_index,
-                        type_id: LimbSegmentTypeId::Disk,
-                    },
-                    Name::new(format!("Limb {limb_index} Segment {segment_index}")),
-                    Transform::default(),
-                ))
-                .id();
 
-            // The bead at the center.
-            parent.entity(segment).with_children(|parent| {
+        commands.entity(parent).with_children(|parent| {
+            let mut segment = parent.spawn((
+                LimbSegment {
+                    segment_index,
+                    type_id: LimbSegmentTypeId::Disk,
+                },
+                Name::new(format!("Limb {limb_index} Segment {segment_index}")),
+                Transform::default(),
+            ));
+
+            segment.with_children(|parent| {
+                // The bead at the center.
                 parent.spawn((
                     LimbSegmentBody,
                     Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
@@ -307,18 +300,15 @@ impl LimbSegmentType for DiskType {
                     MeshMaterial2d(h.segment_material.clone()),
                     Transform::from_translation(Vec3::new(center, 0.0, 0.0)),
                 ));
-            });
 
-            // Outgoing joint for the next bead.
-            parent.entity(segment).with_children(|parent| {
-                let joint = parent
-                    .spawn((
-                        LimbSegmentJoint,
-                        Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
-                        Transform::from_translation(Vec3::new(step, 0.0, 0.0)),
-                    ))
-                    .id();
-                joint_out = Some(joint);
+                // Outgoing joint for the next bead.
+                let joint = parent.spawn((
+                    LimbSegmentJoint,
+                    Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
+                    Transform::from_translation(Vec3::new(step, 0.0, 0.0)),
+                ));
+
+                joint_out = Some(joint.id());
             });
         });
 
@@ -345,11 +335,11 @@ impl LimbSegmentTypeId {
         }
     }
 
-    pub fn spawn_body(
+    pub fn spawn_body<'a>(
         &self,
-        parent: &mut RelatedSpawnerCommands<'_, ChildOf>,
+        parent: &'a mut RelatedSpawnerCommands<'_, ChildOf>,
         store: &LimbAssetStore,
-    ) -> Entity {
+    ) -> EntityCommands<'a> {
         match self {
             LimbSegmentTypeId::Rectangle => RectType::spawn_body(parent, store),
             LimbSegmentTypeId::Disk => DiskType::spawn_body(parent, store),
@@ -406,56 +396,4 @@ pub fn animate_limb_segments(
 pub struct LimbPlan {
     pub oscillator: Oscillator,
     pub segments: Vec<LimbSegmentTypeId>,
-}
-
-/// A creature plan is a list of limbs.
-#[derive(Debug, Clone)]
-pub struct CreaturePlan {
-    pub limbs: Vec<LimbPlan>,
-}
-
-/// A collection of creatures to spawn, with a transform applied to the grouparent.
-#[derive(Resource, Debug, Clone)]
-pub struct CreaturesPlan {
-    pub creatures: Vec<CreaturePlan>,
-    pub transform: Transform,
-}
-
-/// Build an example plan:
-/// - 6 creatures
-/// - each with 8 limbs
-/// - each limb has 16 segments
-/// - all limbs run the same sine oscillator (amplitude 0.2, frequency 0.4)
-/// - segments alternate Rectangle and Disk types along the limb
-pub fn example_creatures_plan() -> CreaturesPlan {
-    let limb_count = 8;
-    let segment_count = 16;
-
-    let oscillator = Oscillator::new(Wave::Sine, 0.2, 0.4);
-
-    let segments: Vec<LimbSegmentTypeId> = (0..segment_count)
-        .map(|i| {
-            if i % 2 == 0 {
-                LimbSegmentTypeId::Rectangle
-            } else {
-                LimbSegmentTypeId::Disk
-            }
-        })
-        .collect();
-
-    let limb = LimbPlan {
-        oscillator: oscillator.clone(),
-        segments: segments.clone(),
-    };
-
-    let creature = CreaturePlan {
-        limbs: std::iter::repeat(limb).take(limb_count).collect(),
-    };
-
-    let creatures: Vec<CreaturePlan> = std::iter::repeat(creature).take(6).collect();
-
-    CreaturesPlan {
-        creatures,
-        transform: Transform::default(),
-    }
 }

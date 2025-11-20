@@ -5,8 +5,8 @@ mod oscillator;
 use bevy::{dev_tools::fps_overlay::FpsOverlayPlugin, prelude::*};
 
 use crate::{
-    creature::spawn_creatures,
-    limb::{animate_limb_segments, example_creatures_plan, LimbAssetStore},
+    creature::{example_creatures_plan, spawn_creatures},
+    limb::{animate_limb_segments, LimbAssetStore},
     oscillator::{oscillator_tick, oscillator_user_update},
 };
 
