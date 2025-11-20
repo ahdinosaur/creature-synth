@@ -75,12 +75,13 @@ pub trait LimbSegmentType {
         store: &LimbAssetStore,
     ) -> EntityCommands<'a>;
 
-    fn spawn_segment<'a>(
-        parent: EntityCommands<'a>,
+    fn spawn_segment(
+        commands: &mut Commands,
+        parent: Entity,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
-    ) -> EntityCommands<'a>;
+    ) -> Entity;
 
     fn flex_for_segment(segment_index: usize) -> f32;
 }
@@ -146,8 +147,9 @@ impl LimbSegmentType for RectType {
         ))
     }
 
-    fn spawn_segment<'a>(
-        mut parent: EntityCommands<'a>,
+    fn spawn_segment(
+        commands: &mut Commands,
+        parent: Entity,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
@@ -156,7 +158,7 @@ impl LimbSegmentType for RectType {
 
         let mut joint_out: Option<Entity> = None;
 
-        parent.with_children(|parent| {
+        commands.entity(parent).with_children(|parent| {
             let mut segment = parent.spawn((
                 LimbSegment {
                     segment_index,
@@ -264,12 +266,13 @@ impl LimbSegmentType for DiskType {
         ))
     }
 
-    fn spawn_segment<'a>(
-        mut parent: EntityCommands<'a>,
+    fn spawn_segment(
+        commands: &mut Commands,
+        parent: Entity,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
-    ) -> EntityCommands<'a> {
+    ) -> Entity {
         let h = store.get(LimbSegmentTypeId::Disk);
 
         let r = Self::DIAMETER / 2.0;
@@ -278,7 +281,7 @@ impl LimbSegmentType for DiskType {
 
         let mut joint_out: Option<Entity> = None;
 
-        parent.with_children(|parent| {
+        commands.entity(parent).with_children(|parent| {
             let mut segment = parent.spawn((
                 LimbSegment {
                     segment_index,
@@ -345,7 +348,8 @@ impl LimbSegmentTypeId {
 
     pub fn spawn_segment(
         &self,
-        mut parent: EntityCommands<'_>,
+        commands: &mut Commands,
+        parent: Entity,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
