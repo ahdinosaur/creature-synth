@@ -17,17 +17,17 @@ const BODY_RADIUS: f32 = 35.0;
 #[derive(Debug, Clone)]
 pub struct CreaturePlan {
     pub limbs: Vec<LimbPlan>,
+    pub transform: Transform,
 }
 
 /// A collection of creatures to spawn, with a transform applied to the grouparent.
 #[derive(Resource, Debug, Clone)]
 pub struct CreaturesPlan {
     pub creatures: Vec<CreaturePlan>,
-    pub transform: Transform,
 }
 
 /// Build an example plan:
-/// - 6 creatures
+/// - 6 creatures, spread around a circle
 /// - each with 8 limbs
 /// - each limb has 16 segments
 /// - all limbs run the same sine oscillator (amplitude 0.2, frequency 0.4)
@@ -53,16 +53,21 @@ pub fn example_creatures_plan() -> CreaturesPlan {
         segments: segments.clone(),
     };
 
-    let creature = CreaturePlan {
-        limbs: std::iter::repeat_n(limb, limb_count).collect(),
-    };
+    let creature_count = 6usize;
+    let radius = 450.0;
 
-    let creatures: Vec<CreaturePlan> = std::iter::repeat_n(creature, 6).collect();
+    let creatures: Vec<CreaturePlan> = (0..creature_count)
+        .map(|i| {
+            let angle = std::f32::consts::TAU * (i as f32) / (creature_count as f32);
+            let pos = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
+            CreaturePlan {
+                limbs: vec![limb.clone(); limb_count],
+                transform: Transform::from_translation(pos),
+            }
+        })
+        .collect();
 
-    CreaturesPlan {
-        creatures,
-        transform: Transform::default(),
-    }
+    CreaturesPlan { creatures }
 }
 
 /// Spawn all creatures described by the CreaturesPlan resource.
@@ -79,7 +84,11 @@ pub fn spawn_creatures(
 
     for (creature_i, creature_plan) in plans.creatures.iter().enumerate() {
         commands
-            .spawn((Creature, Name::new(format!("Creature {creature_i}"))))
+            .spawn((
+                Creature,
+                Name::new(format!("Creature {creature_i}")),
+                creature_plan.transform,
+            ))
             .with_children(|parent| {
                 // Visual body
                 parent.spawn((
@@ -90,6 +99,7 @@ pub fn spawn_creatures(
                     Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
                 ));
 
+                let creature = parent.target_entity();
                 let mut commands = parent.commands();
 
                 // Limbs for this creature (distributed evenly around a circle).
@@ -98,15 +108,18 @@ pub fn spawn_creatures(
                     let angle = std::f32::consts::TAU * limb_index as f32 / limb_count as f32;
                     let limb_oscillator: Oscillator = limb_plan.oscillator.clone();
 
-                    let limb = commands.spawn((
-                        Limb,
-                        limb_oscillator,
-                        Name::new(format!("Limb {limb_index}")),
-                        Transform::from_rotation(Quat::from_rotation_z(angle)),
-                    ));
+                    let limb = commands
+                        .spawn((
+                            Limb,
+                            limb_oscillator,
+                            Name::new(format!("Limb {limb_index}")),
+                            Transform::from_rotation(Quat::from_rotation_z(angle)),
+                        ))
+                        .id();
+                    commands.entity(creature).add_child(limb);
 
                     // Build the chain of segments for this limb.
-                    let mut current_parent = limb.id();
+                    let mut current_parent = limb;
                     for (segment_index, type_id) in limb_plan.segments.iter().copied().enumerate() {
                         // Ensure assets for this segment type exist.
                         type_id.ensure_assets(&mut store, &mut meshes, &mut materials);
@@ -119,6 +132,7 @@ pub fn spawn_creatures(
                             segment_index,
                             &store,
                         );
+                        commands.entity(current_parent).add_child(next_joint);
 
                         current_parent = next_joint;
                     }
