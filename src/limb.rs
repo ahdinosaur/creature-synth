@@ -75,12 +75,12 @@ pub trait LimbSegmentType {
         store: &LimbAssetStore,
     ) -> EntityCommands<'a>;
 
-    fn spawn_segment(
-        parent: EntityCommands<'_>,
+    fn spawn_segment<'a>(
+        parent: EntityCommands<'a>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
-    ) -> Entity;
+    ) -> EntityCommands<'a>;
 
     fn flex_for_segment(segment_index: usize) -> f32;
 }
@@ -146,8 +146,8 @@ impl LimbSegmentType for RectType {
         ))
     }
 
-    fn spawn_segment(
-        mut parent: EntityCommands<'_>,
+    fn spawn_segment<'a>(
+        mut parent: EntityCommands<'a>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
@@ -264,12 +264,12 @@ impl LimbSegmentType for DiskType {
         ))
     }
 
-    fn spawn_segment(
-        mut parent: EntityCommands<'_>,
+    fn spawn_segment<'a>(
+        mut parent: EntityCommands<'a>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
-    ) -> Entity {
+    ) -> EntityCommands<'a> {
         let h = store.get(LimbSegmentTypeId::Disk);
 
         let r = Self::DIAMETER / 2.0;
@@ -345,17 +345,17 @@ impl LimbSegmentTypeId {
 
     pub fn spawn_segment(
         &self,
-        parent: EntityCommands<'_>,
+        mut parent: EntityCommands<'_>,
         limb_index: usize,
         segment_index: usize,
         store: &LimbAssetStore,
     ) -> Entity {
         match self {
             LimbSegmentTypeId::Rectangle => {
-                RectType::spawn_segment(parent, limb_index, segment_index, store)
+                RectType::spawn_segment(commands, parent, limb_index, segment_index, store)
             }
             LimbSegmentTypeId::Disk => {
-                DiskType::spawn_segment(parent, limb_index, segment_index, store)
+                DiskType::spawn_segment(commands, parent, limb_index, segment_index, store)
             }
         }
     }
