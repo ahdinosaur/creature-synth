@@ -1,19 +1,9 @@
-use std::f32::consts::TAU;
-
-use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
-use crate::limb::{Limb, LimbSegment, LimbSegmentBody, LimbSegmentJoint};
-use crate::oscillator::{Oscillator, Wave};
-
-const NUM_LIMBS: usize = 16;
-const SEGMENTS_PER_LIMB: usize = 16;
-
-const SEG_LENGTH: f32 = 20.0;
-const SEG_MARGIN: f32 = 5.0;
-const SEG_THICKNESS: f32 = 10.0;
-
-const BODY_RADIUS: f32 = 35.0;
+use crate::limb::{
+    CreaturePlan, CreaturesPlan, Limb, LimbAssetStore, LimbSegmentTypeId, LimbSegmentTypeIdExt,
+};
+use crate::oscillator::Oscillator;
 
 #[derive(Component)]
 #[require(Transform, Visibility, Children)]
@@ -23,91 +13,85 @@ pub struct Creature;
 #[require(Transform, Visibility)]
 pub struct CreatureBody;
 
-pub fn spawn_creature(
+/// Spawn all creatures described by the CreaturesPlan resource.
+/// Each creature's body type is inferred from its first limb's first segment type.
+pub fn spawn_creatures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut store: ResMut<LimbAssetStore>,
+    plans: Res<CreaturesPlan>,
 ) {
-    // Shared meshes/materials
-    let limb_mesh = meshes.add(Rectangle::new(SEG_LENGTH, SEG_THICKNESS));
-    let limb_mat = materials.add(Color::srgb(0.6, 0.1, 0.8));
-    let body_mesh = meshes.add(Circle::new(BODY_RADIUS));
-    let body_mat = materials.add(Color::srgb(0.3, 0.05, 0.4));
+    // Root for all creatures, so the group transform can be applied once.
+    let root = commands
+        .spawn((
+            Name::new("Creatures"),
+            plans.transform.clone(),
+            Visibility::Visible,
+        ))
+        .id();
 
-    let creature = commands.spawn((Creature, Name::new("Creature"))).id();
+    for (creature_i, creature_plan) in plans.creatures.iter().enumerate() {
+        // Pick a body type based on the first limb's first segment type.
+        let body_type_id = infer_body_type_id(creature_plan);
 
-    // Visual body
-    commands.entity(creature).with_children(|p| {
-        p.spawn((
-            CreatureBody,
-            Name::new("Body"),
-            Mesh2d(body_mesh.clone()),
-            MeshMaterial2d(body_mat.clone()),
-            Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
-        ));
-    });
+        // Ensure body assets exist for the chosen type.
+        body_type_id.ensure_assets(&mut store, &mut meshes, &mut materials);
 
-    // Arms
-    for limb_index in 0..NUM_LIMBS {
-        let limb_angle = (limb_index as f32 / NUM_LIMBS as f32) * TAU;
-        let limb_osc = Oscillator::new(Wave::Sine, 0.2, 0.4);
-
-        let limb = commands
-            .spawn((
-                Limb,
-                limb_osc,
-                Name::new(format!("Limb {limb_index}")),
-                Transform::from_rotation(Quat::from_rotation_z(limb_angle)),
-            ))
+        // Create the creature root entity.
+        let creature = commands
+            .spawn((Creature, Name::new(format!("Creature {creature_i}"))))
             .id();
 
-        commands.entity(creature).add_children(&[limb]);
+        // Attach creature under the global root so the group transform applies.
+        commands.entity(root).add_children(&[creature]);
 
-        let mut current_limb_parent = limb;
+        // Spawn the body as a child of the creature.
+        commands.entity(creature).with_children(|p| {
+            let body_entity = body_type_id.spawn_body(p, &store);
+            p.entity(body_entity).insert(CreatureBody);
+        });
 
-        for segment_index in 0..SEGMENTS_PER_LIMB {
-            // Each limb segment gets the same local rotation from the creature.
-            let limb_segment = commands
+        // Limbs for this creature (distributed evenly around a circle).
+        let limb_count = creature_plan.limbs.len().max(1);
+        for (limb_index, limb_plan) in creature_plan.limbs.iter().enumerate() {
+            let angle = std::f32::consts::TAU * limb_index as f32 / limb_count as f32;
+            let limb_oscillator: Oscillator = limb_plan.oscillator.clone();
+
+            let limb = commands
                 .spawn((
-                    LimbSegment { segment_index },
-                    Name::new(format!("Limb {limb_index} Segment {segment_index}")),
-                    Transform::default(),
+                    Limb,
+                    limb_oscillator,
+                    Name::new(format!("Limb {limb_index}")),
+                    Transform::from_rotation(Quat::from_rotation_z(angle)),
                 ))
                 .id();
 
-            commands
-                .entity(current_limb_parent)
-                .add_children(&[limb_segment]);
+            commands.entity(creature).add_children(&[limb]);
 
-            // Visual rectangle, positioned so its left end is at the joint
-            commands.entity(limb_segment).with_children(|p| {
-                p.spawn((
-                    LimbSegmentBody,
-                    Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
-                    Mesh2d(limb_mesh.clone()),
-                    MeshMaterial2d(limb_mat.clone()),
-                    Transform::from_translation(Vec3::new(SEG_LENGTH / 2.0 + SEG_MARGIN, 0.0, 0.0)),
-                ));
-            });
+            // Build the chain of segments for this limb.
+            let mut current_parent = limb;
+            for (segment_index, type_id) in limb_plan.segments.iter().copied().enumerate() {
+                // Ensure assets for this segment type exist.
+                type_id.ensure_assets(&mut store, &mut meshes, &mut materials);
 
-            // Next joint at the tip of this segment
-            let next_limb_joint = commands
-                .spawn((
-                    LimbSegmentJoint,
-                    Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
-                    Transform::from_translation(Vec3::new(
-                        SEG_LENGTH + 2_f32 * SEG_MARGIN,
-                        0.0,
-                        0.0,
-                    )),
-                ))
-                .id();
-
-            commands
-                .entity(limb_segment)
-                .add_children(&[next_limb_joint]);
-
-            current_limb_parent = next_limb_joint;
+                // Spawn the segment and get the outgoing joint to chain the next one.
+                let next_joint = type_id.spawn_segment(
+                    &mut commands,
+                    current_parent,
+                    limb_index,
+                    segment_index,
+                    &store,
+                );
+                current_parent = next_joint;
+            }
         }
     }
+}
+
+fn infer_body_type_id(plan: &CreaturePlan) -> LimbSegmentTypeId {
+    plan.limbs
+        .first()
+        .and_then(|l| l.segments.first().copied())
+        .expect("CreaturePlan must have at least one limb and one segment")
 }
