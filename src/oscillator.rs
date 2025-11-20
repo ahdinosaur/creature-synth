@@ -1,18 +1,20 @@
 use bevy::prelude::*;
 use std::{f32::consts::TAU, time::Duration};
 
+/// Advance all oscillators by Time, with a capped delta.
 pub fn oscillator_tick(time: Res<Time>, mut q: Query<&mut Oscillator>) {
-    // Clamp very large dt spikes to avoid huge phase jumps after pauses
     let dt = time.delta_secs().min(0.05);
     for mut osc in &mut q {
         osc.tick(dt);
     }
 }
 
-const FREQ_STEP: f32 = 0.05; // Hz per key press
-const MIN_FREQ: f32 = 0.;
-const MAX_FREQ: f32 = 2.;
+const FREQ_STEP: f32 = 0.05;
+const MIN_FREQ: f32 = 0.0;
+const MAX_FREQ: f32 = 2.0;
 
+/// Simple user input: Up/Down arrow changes the target frequency of all
+/// oscillators. Smoothing is handled by the oscillator itself.
 pub fn oscillator_user_update(keys: Res<ButtonInput<KeyCode>>, mut q: Query<&mut Oscillator>) {
     let mut delta = 0.0;
     if keys.just_pressed(KeyCode::ArrowUp) {
@@ -24,14 +26,13 @@ pub fn oscillator_user_update(keys: Res<ButtonInput<KeyCode>>, mut q: Query<&mut
     if delta == 0.0 {
         return;
     }
-
     for mut osc in &mut q {
         let target = (osc.target_frequency() + delta).clamp(MIN_FREQ, MAX_FREQ);
         osc.set_frequency(target);
     }
 }
 
-#[derive(Debug, Component, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 #[allow(dead_code)]
 pub enum Wave {
     #[default]
@@ -49,7 +50,7 @@ pub enum Wave {
 pub struct Frequency {
     current: f32,
     target: f32,
-    tau: f32, // seconds
+    tau: f32,
 }
 
 impl Default for Frequency {
@@ -57,7 +58,7 @@ impl Default for Frequency {
         Self {
             current: 0.0,
             target: 0.0,
-            tau: 0.03, // ~30 ms default glide
+            tau: 0.03,
         }
     }
 }
@@ -87,8 +88,8 @@ impl Frequency {
         self.current
     }
 
-    /// Exponential smoothing that is frame-rate independent.
-    /// alpha = 1 - exp(-dt / tau)
+    // Exponential smoothing that is frame-rate independent.
+    // alpha = 1 - exp(-dt / tau)
     pub fn update(&mut self, dt: f32) -> f32 {
         if dt <= 0.0 {
             return self.current;
@@ -103,12 +104,12 @@ impl Frequency {
     }
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Oscillator {
     wave: Wave,
     amplitude: f32,
     frequency: Frequency,
-    phase: f32, // cycles in [0, 1)
+    phase: f32,
 }
 
 impl Default for Oscillator {
@@ -128,7 +129,7 @@ impl Oscillator {
             wave,
             amplitude,
             frequency: Frequency::new(frequency),
-            phase: 0_f32,
+            phase: 0.0,
         }
     }
 
@@ -136,7 +137,7 @@ impl Oscillator {
         self.frequency.set_tau(d);
     }
 
-    /// Set the target frequencyuency. Glide is applied over the configured tau.
+    // Set the target frequency. Glide is applied over the configured tau.
     pub fn set_frequency(&mut self, hz: f32) {
         self.frequency.set_target(hz);
     }
@@ -149,8 +150,7 @@ impl Oscillator {
         self.frequency.current()
     }
 
-    /// Advance the oscillator by dt.
-    /// Uses the average of f(t) and f(t+dt) for better accuracy.
+    // Advance the oscillator by dt using the average of f(t) and f(t+dt).
     pub fn tick(&mut self, dt: f32) {
         if dt <= 0.0 {
             return;
@@ -158,12 +158,10 @@ impl Oscillator {
         let f0 = self.frequency.current();
         let f1 = self.frequency.update(dt);
         let f_avg = 0.5 * (f0 + f1);
-
-        // phase is in cycles; keep it in [0, 1)
         self.phase = (self.phase + f_avg * dt).fract();
     }
 
-    /// Sample the current waveform at the stored phase.
+    // Sample the current waveform at the stored phase.
     pub fn sample(&self) -> f32 {
         let a = self.amplitude;
         match self.wave {
@@ -181,7 +179,6 @@ impl Oscillator {
                 }
             }
             Wave::Triangle => {
-                // Shift by 0.25 so it starts rising at phase 0
                 let p = (self.phase + 0.25).fract();
                 let tri = 1.0 - 4.0 * (p - 0.5).abs();
                 a * tri

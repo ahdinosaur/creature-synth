@@ -1,19 +1,7 @@
-use std::f32::consts::TAU;
-
-use bevy::math::primitives::{Circle, Rectangle};
 use bevy::prelude::*;
 
-use crate::limb::{Limb, LimbSegment, LimbSegmentBody, LimbSegmentJoint};
+use crate::limb::{Limb, LimbAssetStore, LimbPlan, LimbSegmentTypeId};
 use crate::oscillator::{Oscillator, Wave};
-
-const NUM_LIMBS: usize = 16;
-const SEGMENTS_PER_LIMB: usize = 16;
-
-const SEG_LENGTH: f32 = 20.0;
-const SEG_MARGIN: f32 = 5.0;
-const SEG_THICKNESS: f32 = 10.0;
-
-const BODY_RADIUS: f32 = 35.0;
 
 #[derive(Component)]
 #[require(Transform, Visibility, Children)]
@@ -23,91 +11,136 @@ pub struct Creature;
 #[require(Transform, Visibility)]
 pub struct CreatureBody;
 
-pub fn spawn_creature(
+const BODY_RADIUS: f32 = 35.0;
+
+/// A creature plan is a list of limbs.
+#[derive(Debug, Clone)]
+pub struct CreaturePlan {
+    pub limbs: Vec<LimbPlan>,
+    pub transform: Transform,
+}
+
+/// A collection of creatures to spawn, with a transform applied to the grouparent.
+#[derive(Resource, Debug, Clone)]
+pub struct CreaturesPlan {
+    pub creatures: Vec<CreaturePlan>,
+}
+
+/// Build an example plan:
+/// - 6 creatures, spread around a circle
+/// - each with 8 limbs
+/// - each limb has 16 segments
+/// - all limbs run the same sine oscillator (amplitude 0.2, frequency 0.4)
+/// - segments alternate Rectangle and Disk types along the limb
+pub fn example_creatures_plan() -> CreaturesPlan {
+    let limb_count = 8;
+    let segment_count = 16;
+
+    let oscillator = Oscillator::new(Wave::Sine, 0.2, 0.4);
+
+    let segments: Vec<LimbSegmentTypeId> = (0..segment_count)
+        .map(|i| {
+            if i % 2 == 0 {
+                LimbSegmentTypeId::Rectangle
+            } else {
+                LimbSegmentTypeId::Disk
+            }
+        })
+        .collect();
+
+    let limb = LimbPlan {
+        oscillator: oscillator.clone(),
+        segments: segments.clone(),
+    };
+
+    let creature_count = 6usize;
+    let radius = 450.0;
+
+    let creatures: Vec<CreaturePlan> = (0..creature_count)
+        .map(|i| {
+            let angle = std::f32::consts::TAU * (i as f32) / (creature_count as f32);
+            let pos = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
+            CreaturePlan {
+                limbs: vec![limb.clone(); limb_count],
+                transform: Transform::from_translation(pos),
+            }
+        })
+        .collect();
+
+    CreaturesPlan { creatures }
+}
+
+/// Spawn all creatures described by the CreaturesPlan resource.
+/// Each creature's body type is inferred from its first limb's first segment type.
+pub fn spawn_creatures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut store: ResMut<LimbAssetStore>,
+    plans: Res<CreaturesPlan>,
 ) {
-    // Shared meshes/materials
-    let limb_mesh = meshes.add(Rectangle::new(SEG_LENGTH, SEG_THICKNESS));
-    let limb_mat = materials.add(Color::srgb(0.6, 0.1, 0.8));
     let body_mesh = meshes.add(Circle::new(BODY_RADIUS));
     let body_mat = materials.add(Color::srgb(0.3, 0.05, 0.4));
 
-    let creature = commands.spawn((Creature, Name::new("Creature"))).id();
-
-    // Visual body
-    commands.entity(creature).with_children(|p| {
-        p.spawn((
-            CreatureBody,
-            Name::new("Body"),
-            Mesh2d(body_mesh.clone()),
-            MeshMaterial2d(body_mat.clone()),
-            Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
-        ));
-    });
-
-    // Arms
-    for limb_index in 0..NUM_LIMBS {
-        let limb_angle = (limb_index as f32 / NUM_LIMBS as f32) * TAU;
-        let limb_osc = Oscillator::new(Wave::Sine, 0.2, 0.4);
-
-        let limb = commands
+    for (creature_i, creature_plan) in plans.creatures.iter().enumerate() {
+        // Create the creature entity with its own transform (no shared root).
+        let creature = commands
             .spawn((
-                Limb,
-                limb_osc,
-                Name::new(format!("Limb {limb_index}")),
-                Transform::from_rotation(Quat::from_rotation_z(limb_angle)),
+                Creature,
+                Name::new(format!("Creature {creature_i}")),
+                creature_plan.transform.clone(),
             ))
             .id();
 
-        commands.entity(creature).add_children(&[limb]);
+        // Visual body
+        commands.entity(creature).with_children(|parent| {
+            parent.spawn((
+                CreatureBody,
+                Name::new("Body"),
+                Mesh2d(body_mesh.clone()),
+                MeshMaterial2d(body_mat.clone()),
+                Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
+            ));
+        });
 
-        let mut current_limb_parent = limb;
+        // Limbs for this creature (distributed evenly around a circle).
+        let limb_count = creature_plan.limbs.len().max(1);
+        for (limb_index, limb_plan) in creature_plan.limbs.iter().enumerate() {
+            let angle = std::f32::consts::TAU * limb_index as f32 / limb_count as f32;
+            let limb_oscillator: Oscillator = limb_plan.oscillator.clone();
 
-        for segment_index in 0..SEGMENTS_PER_LIMB {
-            // Each limb segment gets the same local rotation from the creature.
-            let limb_segment = commands
+            let limb = commands
                 .spawn((
-                    LimbSegment { segment_index },
-                    Name::new(format!("Limb {limb_index} Segment {segment_index}")),
-                    Transform::default(),
+                    Limb,
+                    limb_oscillator,
+                    Name::new(format!("Limb {limb_index}")),
+                    Transform::from_rotation(Quat::from_rotation_z(angle)),
                 ))
                 .id();
 
-            commands
-                .entity(current_limb_parent)
-                .add_children(&[limb_segment]);
+            commands.entity(creature).add_children(&[limb]);
 
-            // Visual rectangle, positioned so its left end is at the joint
-            commands.entity(limb_segment).with_children(|p| {
-                p.spawn((
-                    LimbSegmentBody,
-                    Name::new(format!("Limb {limb_index} Segment {segment_index} Body")),
-                    Mesh2d(limb_mesh.clone()),
-                    MeshMaterial2d(limb_mat.clone()),
-                    Transform::from_translation(Vec3::new(SEG_LENGTH / 2.0 + SEG_MARGIN, 0.0, 0.0)),
-                ));
-            });
+            // Build the chain of segments for this limb.
+            let mut current_parent = limb;
+            for (segment_index, type_id) in creature_plan.limbs[limb_index]
+                .segments
+                .iter()
+                .copied()
+                .enumerate()
+            {
+                // Ensure assets for this segment type exist.
+                type_id.ensure_assets(&mut store, &mut meshes, &mut materials);
 
-            // Next joint at the tip of this segment
-            let next_limb_joint = commands
-                .spawn((
-                    LimbSegmentJoint,
-                    Name::new(format!("Limb {limb_index} Segment {segment_index} Joint")),
-                    Transform::from_translation(Vec3::new(
-                        SEG_LENGTH + 2_f32 * SEG_MARGIN,
-                        0.0,
-                        0.0,
-                    )),
-                ))
-                .id();
-
-            commands
-                .entity(limb_segment)
-                .add_children(&[next_limb_joint]);
-
-            current_limb_parent = next_limb_joint;
+                // Spawn the segment and get the outgoing joint to chain the next one.
+                let next_joint = type_id.spawn_segment(
+                    &mut commands,
+                    current_parent,
+                    limb_index,
+                    segment_index,
+                    &store,
+                );
+                current_parent = next_joint;
+            }
         }
     }
 }
